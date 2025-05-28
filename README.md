@@ -2,7 +2,7 @@
 
 This is a simple text editor built with C. It implements all basic features of a text editor as well as some other features like syntax highlighting and search feature.
 
-## How to run
+## Getting Started
 
 1. Clone and navigate to the project folder:
    ```bash
