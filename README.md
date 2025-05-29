@@ -34,3 +34,8 @@ This project uses a Makefile to manage the build process. The Makefile includes 
 - `-std=c99`: Specifies that the C99 standard should be used. This allows for more modern C features, such as declaring variables anywhere within a function.
 
 > **Note:** If your code compiles successfully, you should not see any warnings except for possible "unused variable" warnings in some cases. If you encounter other warnings, double-check your code for accuracy.
+
+## References
+
+- [Software Flow Control - Wikipedia](https://en.wikipedia.org/wiki/Software_flow_control)
+- [Confusion about raw vs. cooked terminal modes? - Stack Overflow](https://stackoverflow.com/questions/13104460/confusion-about-raw-vs-cooked-terminal-modes)
