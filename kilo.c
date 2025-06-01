@@ -4,10 +4,10 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <termios.h>
+#include <unistd.h>
 
-/*** Defines ****/
+/*** Defines ***/
 
 #define CTRL_KEY(k) ((k) & 0x1f)
 
@@ -28,6 +28,7 @@ void disableRawMode()
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1)
         die("tcsetattr");
 }
+
 void enableRawMode()
 {
     if (tcgetattr(STDIN_FILENO, &orig_termios) == -1)
