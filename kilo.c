@@ -2,6 +2,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <sys/ioctl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <termios.h>
@@ -28,11 +29,15 @@
  * Stores the editor's configuration and state.
  *
  * Members:
- *   orig_termios - The original terminal attributes before enabling raw mode.
- *                  Used to restore the terminal state when the editor exits.
+ *   screenrows    - Number of rows in the editor window.
+ *   screencols    - Number of columns in the editor window.
+ *   orig_termios  - The original terminal attributes before enabling raw mode.
+ *                   Used to restore the terminal state when the editor exits.
  */
 struct editorConfig
 {
+    int screenrows;
+    int screencols;
     struct termios orig_termios;
 };
 
@@ -119,6 +124,33 @@ char editorReadKey()
     return c;
 }
 
+/**
+ * Gets the size of the terminal window.
+ *
+ * This function attempts to retrieve the number of rows and columns of the terminal
+ * window using the ioctl system call with TIOCGWINSZ. If successful, it stores the
+ * values in the provided pointers. If the call fails or returns invalid data,
+ * the function returns -1.
+ *
+ * @param rows Pointer to an integer where the number of rows will be stored.
+ * @param cols Pointer to an integer where the number of columns will be stored.
+ * @return 0 on success, -1 on failure.
+ */
+int getWindowSize(int *rows, int *cols)
+{
+    struct winsize ws;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0)
+    {
+        return -1;
+    }
+    else
+    {
+        *cols = ws.ws_col;
+        *rows = ws.ws_row;
+        return 0;
+    }
+}
+
 /*** Output ***/
 
 /**
@@ -132,7 +164,7 @@ char editorReadKey()
 void editorDrawRows()
 {
     int y;
-    for (y = 0; y < 24; y++)
+    for (y = 0; y < E.screenrows; y++)
     {
         write(STDOUT_FILENO, "~\r\n", 3);
     }
@@ -178,9 +210,24 @@ void editorProcessKeypress()
 
 /*** Init ***/
 
+/**
+ * Initializes the editor configuration.
+ *
+ * This function retrieves the size of the terminal window and stores
+ * the number of rows and columns in the global editor configuration struct E.
+ * If retrieving the window size fails, the function prints an error message
+ * and exits the program.
+ */
+void initEditor()
+{
+    if (getWindowSize(&E.screenrows, &E.screencols) == -1)
+        die("getWindowSize");
+}
+
 int main()
 {
     enableRawMode();
+    initEditor();
     while (1)
     {
         editorRefreshScreen();
