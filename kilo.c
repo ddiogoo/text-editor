@@ -199,16 +199,20 @@ int getWindowSize(int *rows, int *cols)
  * Draws the rows of the editor.
  *
  * This function outputs a series of lines to the terminal, each starting with a tilde (~)
- * character followed by a carriage return and newline. It currently draws 24 rows,
- * serving as a placeholder for where file contents will eventually be displayed.
- * The tildes are commonly used in text editors to indicate empty lines.
+ * character followed by a carriage return and newline. It draws as many rows as the current
+ * height of the editor window (E.screenrows), serving as a placeholder for where file contents
+ * will eventually be displayed. The tildes are commonly used in text editors to indicate empty lines.
  */
 void editorDrawRows()
 {
     int y;
     for (y = 0; y < E.screenrows; y++)
     {
-        write(STDOUT_FILENO, "~\r\n", 3);
+        write(STDOUT_FILENO, "~", 1);
+        if (y < E.screenrows - 1)
+        {
+            write(STDOUT_FILENO, "\r\n", 2);
+        }
     }
 }
 
