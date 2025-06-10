@@ -260,10 +260,11 @@ void abFree(struct abuf *ab)
 /**
  * Draws the rows of the editor into an append buffer.
  *
- * This function appends a tilde (~) character at the start of each line to the provided
- * append buffer, followed by a carriage return and newline ("\r\n") except for the last line.
- * The number of lines drawn matches the current height of the editor window (E.screenrows).
- * This serves as a placeholder for where file contents will be displayed in the future.
+ * For each row in the editor window, this function appends a tilde (~) at the start of the line,
+ * followed by an escape sequence to clear the line from the cursor to the end. For all but the
+ * last row, it also appends a carriage return and newline ("\r\n"). The number of rows drawn
+ * matches the current height of the editor window (E.screenrows). This is a placeholder for
+ * where file contents will eventually be displayed.
  *
  * @param ab Pointer to the append buffer where the rows will be appended.
  */
@@ -273,6 +274,7 @@ void editorDrawRows(struct abuf *ab)
     for (y = 0; y < E.screenrows; y++)
     {
         abAppend(ab, "~", 1);
+        abAppend(ab, "\x1b[K", 3);
         if (y < E.screenrows - 1)
         {
             abAppend(ab, "\r\n", 2);
@@ -283,16 +285,18 @@ void editorDrawRows(struct abuf *ab)
 /**
  * Refreshes the editor screen.
  *
- * This function builds an output buffer, hides the cursor, clears the screen,
- * moves the cursor to the top-left, draws the editor rows (currently tildes as placeholders),
- * then moves the cursor back to the top-left and shows the cursor again.
- * The entire buffer is written to the terminal in one operation for efficiency.
+ * This function constructs an output buffer, hides the cursor, moves the cursor to the
+ * top-left corner, draws the editor rows (currently displaying tildes as placeholders),
+ * then repositions the cursor to the top-left and shows the cursor again. The entire
+ * buffer is written to the terminal in a single write operation for performance.
+ *
+ * The function uses an append buffer to minimize flicker and reduce the number of
+ * system calls by batching all output before displaying it.
  */
 void editorRefreshScreen()
 {
     struct abuf ab = ABUF_INIT;
     abAppend(&ab, "\x1b[?25l", 6);
-    abAppend(&ab, "\x1b[2J", 4);
     abAppend(&ab, "\x1b[H", 3);
     editorDrawRows(&ab);
     abAppend(&ab, "\x1b[H", 3);
