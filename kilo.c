@@ -283,20 +283,20 @@ void editorDrawRows(struct abuf *ab)
 /**
  * Refreshes the editor screen.
  *
- * This function constructs an output buffer, clears the terminal screen,
- * moves the cursor to the top-left corner, draws the editor rows (currently
- * displaying tildes as placeholders), and then resets the cursor position
- * to the top-left. The buffer is then written to the terminal in a single
- * write operation for efficiency. Called on each iteration of the main loop
- * to update the display.
+ * This function builds an output buffer, hides the cursor, clears the screen,
+ * moves the cursor to the top-left, draws the editor rows (currently tildes as placeholders),
+ * then moves the cursor back to the top-left and shows the cursor again.
+ * The entire buffer is written to the terminal in one operation for efficiency.
  */
 void editorRefreshScreen()
 {
     struct abuf ab = ABUF_INIT;
+    abAppend(&ab, "\x1b[?25l", 6);
     abAppend(&ab, "\x1b[2J", 4);
     abAppend(&ab, "\x1b[H", 3);
     editorDrawRows(&ab);
     abAppend(&ab, "\x1b[H", 3);
+    abAppend(&ab, "\x1b[?25h", 6);
     write(STDOUT_FILENO, ab.b, ab.len);
     abFree(&ab);
 }
