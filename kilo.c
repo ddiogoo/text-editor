@@ -12,6 +12,15 @@
 /*** Defines ***/
 
 /**
+ * KILO_VERSION macro
+ *
+ * Defines the current version of the Kilo text editor as a string literal.
+ * This macro is used throughout the program to display or reference the
+ * editor's version number.
+ */
+#define KILO_VERSION "0.0.1"
+
+/**
  * CTRL_KEY macro
  *
  * Converts a character to its corresponding control key code.
@@ -260,11 +269,11 @@ void abFree(struct abuf *ab)
 /**
  * Draws the rows of the editor into an append buffer.
  *
- * For each row in the editor window, this function appends a tilde (~) at the start of the line,
- * followed by an escape sequence to clear the line from the cursor to the end. For all but the
- * last row, it also appends a carriage return and newline ("\r\n"). The number of rows drawn
- * matches the current height of the editor window (E.screenrows). This is a placeholder for
- * where file contents will eventually be displayed.
+ * For each row in the editor window, this function appends a tilde (~) at the start of the line.
+ * On the row one-third down the screen, it centers and displays a welcome message with the editor version.
+ * All lines are cleared from the cursor to the end using an escape sequence.
+ * For all but the last row, a carriage return and newline ("\r\n") are appended.
+ * The number of rows drawn matches the current height of the editor window (E.screenrows).
  *
  * @param ab Pointer to the append buffer where the rows will be appended.
  */
@@ -273,7 +282,27 @@ void editorDrawRows(struct abuf *ab)
     int y;
     for (y = 0; y < E.screenrows; y++)
     {
-        abAppend(ab, "~", 1);
+        if (y == E.screenrows / 3)
+        {
+            char welcome[80];
+            int welcomelen = snprintf(welcome, sizeof(welcome),
+                                      "Kilo editor -- version %s", KILO_VERSION);
+            if (welcomelen > E.screencols)
+                welcomelen = E.screencols;
+            int padding = (E.screencols - welcomelen) / 2;
+            if (padding)
+            {
+                abAppend(ab, "~", 1);
+                padding--;
+            }
+            while (padding--)
+                abAppend(ab, " ", 1);
+            abAppend(ab, welcome, welcomelen);
+        }
+        else
+        {
+            abAppend(ab, "~", 1);
+        }
         abAppend(ab, "\x1b[K", 3);
         if (y < E.screenrows - 1)
         {
