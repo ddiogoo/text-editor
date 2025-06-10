@@ -5,6 +5,7 @@
 #include <sys/ioctl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -193,25 +194,88 @@ int getWindowSize(int *rows, int *cols)
     }
 }
 
+/*** Append buffer ***/
+
+/**
+ * struct abuf
+ *
+ * A dynamic append buffer used for efficiently building output strings.
+ *
+ * Members:
+ *   b   - Pointer to the buffer's character data.
+ *   len - Current length of the buffer (number of bytes used).
+ */
+struct abuf
+{
+    char *b;
+    int len;
+};
+
+/**
+ * ABUF_INIT macro
+ *
+ * Initializes an abuf structure with a NULL buffer and zero length.
+ * Useful for creating an empty append buffer.
+ */
+#define ABUF_INIT {NULL, 0}
+
+/**
+ * Appends a string to the append buffer.
+ *
+ * This function reallocates the buffer in the abuf structure to accommodate
+ * the new data, copies the specified string into the buffer, and updates
+ * the buffer's length. If memory allocation fails, the function returns
+ * without modifying the buffer.
+ *
+ * @param ab  Pointer to the append buffer structure.
+ * @param s   Pointer to the string to append.
+ * @param len Length of the string to append.
+ */
+void abAppend(struct abuf *ab, const char *s, int len)
+{
+    char *new = realloc(ab->b, ab->len + len);
+    if (new == NULL)
+        return;
+    memcpy(&new[ab->len], s, len);
+    ab->b = new;
+    ab->len += len;
+}
+
+/**
+ * Frees the memory used by the append buffer.
+ *
+ * This function releases the memory allocated for the buffer's character data
+ * in the abuf structure. It should be called when the append buffer is no longer
+ * needed to avoid memory leaks.
+ *
+ * @param ab Pointer to the append buffer structure to free.
+ */
+void abFree(struct abuf *ab)
+{
+    free(ab->b);
+}
+
 /*** Output ***/
 
 /**
- * Draws the rows of the editor.
+ * Draws the rows of the editor into an append buffer.
  *
- * This function outputs a series of lines to the terminal, each starting with a tilde (~)
- * character followed by a carriage return and newline. It draws as many rows as the current
- * height of the editor window (E.screenrows), serving as a placeholder for where file contents
- * will eventually be displayed. The tildes are commonly used in text editors to indicate empty lines.
+ * This function appends a tilde (~) character at the start of each line to the provided
+ * append buffer, followed by a carriage return and newline ("\r\n") except for the last line.
+ * The number of lines drawn matches the current height of the editor window (E.screenrows).
+ * This serves as a placeholder for where file contents will be displayed in the future.
+ *
+ * @param ab Pointer to the append buffer where the rows will be appended.
  */
-void editorDrawRows()
+void editorDrawRows(struct abuf *ab)
 {
     int y;
     for (y = 0; y < E.screenrows; y++)
     {
-        write(STDOUT_FILENO, "~", 1);
+        abAppend(ab, "~", 1);
         if (y < E.screenrows - 1)
         {
-            write(STDOUT_FILENO, "\r\n", 2);
+            abAppend(ab, "\r\n", 2);
         }
     }
 }
@@ -219,17 +283,22 @@ void editorDrawRows()
 /**
  * Refreshes the editor screen.
  *
- * This function clears the terminal screen, moves the cursor to the top-left
- * corner, draws the editor rows (currently displaying tildes as placeholders),
- * and then resets the cursor position to the top-left. It is called on each
- * iteration of the main loop to update the display.
+ * This function constructs an output buffer, clears the terminal screen,
+ * moves the cursor to the top-left corner, draws the editor rows (currently
+ * displaying tildes as placeholders), and then resets the cursor position
+ * to the top-left. The buffer is then written to the terminal in a single
+ * write operation for efficiency. Called on each iteration of the main loop
+ * to update the display.
  */
 void editorRefreshScreen()
 {
-    write(STDOUT_FILENO, "\x1b[2J", 4);
-    write(STDOUT_FILENO, "\x1b[H", 3);
-    editorDrawRows();
-    write(STDOUT_FILENO, "\x1b[H", 3);
+    struct abuf ab = ABUF_INIT;
+    abAppend(&ab, "\x1b[2J", 4);
+    abAppend(&ab, "\x1b[H", 3);
+    editorDrawRows(&ab);
+    abAppend(&ab, "\x1b[H", 3);
+    write(STDOUT_FILENO, ab.b, ab.len);
+    abFree(&ab);
 }
 
 /*** Input ***/
