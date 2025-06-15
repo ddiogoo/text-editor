@@ -36,16 +36,17 @@
 /**
  * struct editorConfig
  *
- * Stores the editor's configuration and state.
+ * Holds the current state and configuration of the editor.
  *
  * Members:
- *   screenrows    - Number of rows in the editor window.
- *   screencols    - Number of columns in the editor window.
- *   orig_termios  - The original terminal attributes before enabling raw mode.
- *                   Used to restore the terminal state when the editor exits.
+ *   cx, cy        - Current cursor x and y position within the editor window.
+ *   screenrows    - Number of rows visible in the editor window.
+ *   screencols    - Number of columns visible in the editor window.
+ *   orig_termios  - Original terminal settings, used to restore terminal state on exit.
  */
 struct editorConfig
 {
+    int cx, cy;
     int screenrows;
     int screencols;
     struct termios orig_termios;
@@ -314,13 +315,13 @@ void editorDrawRows(struct abuf *ab)
 /**
  * Refreshes the editor screen.
  *
- * This function constructs an output buffer, hides the cursor, moves the cursor to the
- * top-left corner, draws the editor rows (currently displaying tildes as placeholders),
- * then repositions the cursor to the top-left and shows the cursor again. The entire
- * buffer is written to the terminal in a single write operation for performance.
+ * This function creates an append buffer to batch terminal output, hides the cursor,
+ * moves the cursor to the top-left, draws the editor rows (with tildes and a welcome message),
+ * repositions the cursor to the current editor coordinates, and then shows the cursor again.
+ * The entire buffer is written to the terminal at once to reduce flicker and improve performance.
  *
- * The function uses an append buffer to minimize flicker and reduce the number of
- * system calls by batching all output before displaying it.
+ * The cursor is positioned according to the editor's current state (E.cx, E.cy).
+ * All output is freed after being written.
  */
 void editorRefreshScreen()
 {
@@ -328,7 +329,9 @@ void editorRefreshScreen()
     abAppend(&ab, "\x1b[?25l", 6);
     abAppend(&ab, "\x1b[H", 3);
     editorDrawRows(&ab);
-    abAppend(&ab, "\x1b[H", 3);
+    char buf[32];
+    snprintf(buf, sizeof(buf), "\x1b[%d;%dH", E.cy + 1, E.cx + 1);
+    abAppend(&ab, buf, strlen(buf));
     abAppend(&ab, "\x1b[?25h", 6);
     write(STDOUT_FILENO, ab.b, ab.len);
     abFree(&ab);
@@ -337,11 +340,43 @@ void editorRefreshScreen()
 /*** Input ***/
 
 /**
+ * Moves the cursor in the editor based on the input key.
+ *
+ * This function updates the cursor position (E.cx, E.cy) according to the
+ * provided key, which should be one of 'w', 'a', 's', or 'd' for up, left,
+ * down, and right movement, respectively. The function does not perform
+ * boundary checks, so the cursor may move outside the visible window.
+ *
+ * @param key The character representing the direction to move the cursor:
+ *            'w' = up, 'a' = left, 's' = down, 'd' = right.
+ */
+void editorMoveCursor(char key)
+{
+    switch (key)
+    {
+    case 'a':
+        E.cx--;
+        break;
+    case 'd':
+        E.cx++;
+        break;
+    case 'w':
+        E.cy--;
+        break;
+    case 's':
+        E.cy++;
+        break;
+    }
+}
+
+/**
  * Processes a single keypress from the user.
  *
  * This function reads a keypress and performs the corresponding action.
- * Currently, it handles quitting the editor when Ctrl-Q is pressed by
- * clearing the screen and exiting the program.
+ * - If Ctrl-Q is pressed, it clears the screen and exits the program.
+ * - If 'w', 'a', 's', or 'd' is pressed, it moves the cursor in the corresponding direction
+ *   (up, left, down, or right) by calling editorMoveCursor().
+ * Other keys are ignored.
  */
 void editorProcessKeypress()
 {
@@ -353,6 +388,12 @@ void editorProcessKeypress()
         write(STDOUT_FILENO, "\x1b[H", 3);
         exit(0);
         break;
+    case 'w':
+    case 's':
+    case 'a':
+    case 'd':
+        editorMoveCursor(c);
+        break;
     }
 }
 
@@ -361,13 +402,15 @@ void editorProcessKeypress()
 /**
  * Initializes the editor configuration.
  *
- * This function retrieves the size of the terminal window and stores
- * the number of rows and columns in the global editor configuration struct E.
- * If retrieving the window size fails, the function prints an error message
- * and exits the program.
+ * Sets the initial cursor position to the top-left corner (0,0).
+ * Retrieves the current terminal window size and stores the number of rows and columns
+ * in the global editor configuration struct E. If retrieving the window size fails,
+ * the function prints an error message and exits the program.
  */
 void initEditor()
 {
+    E.cx = 0;
+    E.cy = 0;
     if (getWindowSize(&E.screenrows, &E.screencols) == -1)
         die("getWindowSize");
 }
