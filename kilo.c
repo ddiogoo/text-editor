@@ -36,18 +36,22 @@
  *
  * Defines special key codes for handling non-character keys in the editor.
  * These values are set to be greater than 1000 to avoid conflicts with
- * regular character input. The enum includes codes for the arrow keys:
+ * regular character input. The enum includes codes for the arrow keys and page navigation:
  *   - ARROW_LEFT:  Left arrow key
  *   - ARROW_RIGHT: Right arrow key
  *   - ARROW_UP:    Up arrow key
  *   - ARROW_DOWN:  Down arrow key
+ *   - PAGE_UP:     Page Up key
+ *   - PAGE_DOWN:   Page Down key
  */
 enum editorKey
 {
     ARROW_LEFT = 1000,
     ARROW_RIGHT,
     ARROW_UP,
-    ARROW_DOWN
+    ARROW_DOWN,
+    PAGE_UP,
+    PAGE_DOWN
 };
 
 /*** Data ***/
@@ -134,15 +138,15 @@ void enableRawMode()
 }
 
 /**
- * Reads a single keypress from standard input, including arrow keys.
+ * Reads a single keypress from standard input, including arrow keys and page navigation keys.
  *
  * This function waits for a single character input from the user,
  * handling read errors appropriately. If an escape sequence is detected,
- * it interprets arrow key escape codes and returns the corresponding
- * editorKey enum value (ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT).
+ * it interprets arrow key and page up/down escape codes and returns the corresponding
+ * editorKey enum value (ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT, PAGE_UP, PAGE_DOWN).
  * Otherwise, it returns the character read from standard input.
  *
- * @return The character read, or a special key code for arrow keys.
+ * @return The character read, or a special key code for arrow keys and page navigation keys.
  */
 int editorReadKey()
 {
@@ -153,7 +157,6 @@ int editorReadKey()
         if (nread == -1 && errno != EAGAIN)
             die("read");
     }
-
     if (c == '\x1b')
     {
         char seq[3];
@@ -161,19 +164,36 @@ int editorReadKey()
             return '\x1b';
         if (read(STDIN_FILENO, &seq[1], 1) != 1)
             return '\x1b';
-
         if (seq[0] == '[')
         {
-            switch (seq[1])
+            if (seq[1] >= '0' && seq[1] <= '9')
             {
-            case 'A':
-                return ARROW_UP;
-            case 'B':
-                return ARROW_DOWN;
-            case 'C':
-                return ARROW_RIGHT;
-            case 'D':
-                return ARROW_LEFT;
+                if (read(STDIN_FILENO, &seq[2], 1) != 1)
+                    return '\x1b';
+                if (seq[2] == '~')
+                {
+                    switch (seq[1])
+                    {
+                    case '5':
+                        return PAGE_UP;
+                    case '6':
+                        return PAGE_DOWN;
+                    }
+                }
+            }
+            else
+            {
+                switch (seq[1])
+                {
+                case 'A':
+                    return ARROW_UP;
+                case 'B':
+                    return ARROW_DOWN;
+                case 'C':
+                    return ARROW_RIGHT;
+                case 'D':
+                    return ARROW_LEFT;
+                }
             }
         }
         return '\x1b';
@@ -434,8 +454,9 @@ void editorMoveCursor(int key)
 /**
  * Processes a single keypress from the user.
  *
- * This function reads a keypress and performs the corresponding action.
+ * This function reads a keypress and performs the corresponding action:
  * - If Ctrl-Q is pressed, it clears the screen and exits the program.
+ * - If Page Up or Page Down is pressed, it moves the cursor up or down by one screenful.
  * - If an arrow key is pressed, it moves the cursor in the corresponding direction
  *   (up, down, left, or right) by calling editorMoveCursor().
  * Other keys are ignored.
@@ -450,6 +471,14 @@ void editorProcessKeypress()
         write(STDOUT_FILENO, "\x1b[H", 3);
         exit(0);
         break;
+    case PAGE_UP:
+    case PAGE_DOWN:
+    {
+        int times = E.screenrows;
+        while (times--)
+            editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
+    }
+    break;
     case ARROW_UP:
     case ARROW_DOWN:
     case ARROW_LEFT:
