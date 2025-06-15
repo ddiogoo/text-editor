@@ -31,6 +31,25 @@
  */
 #define CTRL_KEY(k) ((k) & 0x1f)
 
+/**
+ * enum editorKey
+ *
+ * Defines special key codes for handling non-character keys in the editor.
+ * These values are set to be greater than 1000 to avoid conflicts with
+ * regular character input. The enum includes codes for the arrow keys:
+ *   - ARROW_LEFT:  Left arrow key
+ *   - ARROW_RIGHT: Right arrow key
+ *   - ARROW_UP:    Up arrow key
+ *   - ARROW_DOWN:  Down arrow key
+ */
+enum editorKey
+{
+    ARROW_LEFT = 1000,
+    ARROW_RIGHT,
+    ARROW_UP,
+    ARROW_DOWN
+};
+
 /*** Data ***/
 
 /**
@@ -115,15 +134,17 @@ void enableRawMode()
 }
 
 /**
- * Reads a single keypress from standard input.
+ * Reads a single keypress from standard input, including arrow keys.
  *
  * This function waits for a single character input from the user,
- * handling read errors appropriately. It is used to capture raw
- * keyboard input in the editor, including control characters.
+ * handling read errors appropriately. If an escape sequence is detected,
+ * it interprets arrow key escape codes and returns the corresponding
+ * editorKey enum value (ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT).
+ * Otherwise, it returns the character read from standard input.
  *
- * @return The character read from standard input.
+ * @return The character read, or a special key code for arrow keys.
  */
-char editorReadKey()
+int editorReadKey()
 {
     int nread;
     char c;
@@ -132,7 +153,35 @@ char editorReadKey()
         if (nread == -1 && errno != EAGAIN)
             die("read");
     }
-    return c;
+
+    if (c == '\x1b')
+    {
+        char seq[3];
+        if (read(STDIN_FILENO, &seq[0], 1) != 1)
+            return '\x1b';
+        if (read(STDIN_FILENO, &seq[1], 1) != 1)
+            return '\x1b';
+
+        if (seq[0] == '[')
+        {
+            switch (seq[1])
+            {
+            case 'A':
+                return ARROW_UP;
+            case 'B':
+                return ARROW_DOWN;
+            case 'C':
+                return ARROW_RIGHT;
+            case 'D':
+                return ARROW_LEFT;
+            }
+        }
+        return '\x1b';
+    }
+    else
+    {
+        return c;
+    }
 }
 
 /**
@@ -343,28 +392,41 @@ void editorRefreshScreen()
  * Moves the cursor in the editor based on the input key.
  *
  * This function updates the cursor position (E.cx, E.cy) according to the
- * provided key, which should be one of 'w', 'a', 's', or 'd' for up, left,
- * down, and right movement, respectively. The function does not perform
- * boundary checks, so the cursor may move outside the visible window.
+ * provided key, which should be one of the arrow key codes (ARROW_UP, ARROW_DOWN,
+ * ARROW_LEFT, ARROW_RIGHT) for up, down, left, and right movement, respectively.
+ * The function performs boundary checks to prevent the cursor from moving outside
+ * the visible window.
  *
- * @param key The character representing the direction to move the cursor:
- *            'w' = up, 'a' = left, 's' = down, 'd' = right.
+ * @param key The key code representing the direction to move the cursor:
+ *            ARROW_UP, ARROW_DOWN, ARROW_LEFT, or ARROW_RIGHT.
  */
-void editorMoveCursor(char key)
+void editorMoveCursor(int key)
 {
     switch (key)
     {
-    case 'a':
-        E.cx--;
+    case ARROW_LEFT:
+        if (E.cx != 0)
+        {
+            E.cx--;
+        }
         break;
-    case 'd':
-        E.cx++;
+    case ARROW_RIGHT:
+        if (E.cx != E.screencols - 1)
+        {
+            E.cx++;
+        }
         break;
-    case 'w':
-        E.cy--;
+    case ARROW_UP:
+        if (E.cy != 0)
+        {
+            E.cy--;
+        }
         break;
-    case 's':
-        E.cy++;
+    case ARROW_DOWN:
+        if (E.cy != E.screenrows - 1)
+        {
+            E.cy++;
+        }
         break;
     }
 }
@@ -374,13 +436,13 @@ void editorMoveCursor(char key)
  *
  * This function reads a keypress and performs the corresponding action.
  * - If Ctrl-Q is pressed, it clears the screen and exits the program.
- * - If 'w', 'a', 's', or 'd' is pressed, it moves the cursor in the corresponding direction
- *   (up, left, down, or right) by calling editorMoveCursor().
+ * - If an arrow key is pressed, it moves the cursor in the corresponding direction
+ *   (up, down, left, or right) by calling editorMoveCursor().
  * Other keys are ignored.
  */
 void editorProcessKeypress()
 {
-    char c = editorReadKey();
+    int c = editorReadKey();
     switch (c)
     {
     case CTRL_KEY('q'):
@@ -388,10 +450,10 @@ void editorProcessKeypress()
         write(STDOUT_FILENO, "\x1b[H", 3);
         exit(0);
         break;
-    case 'w':
-    case 's':
-    case 'a':
-    case 'd':
+    case ARROW_UP:
+    case ARROW_DOWN:
+    case ARROW_LEFT:
+    case ARROW_RIGHT:
         editorMoveCursor(c);
         break;
     }
