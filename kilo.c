@@ -42,6 +42,7 @@
  *   ARROW_RIGHT  - Right arrow key
  *   ARROW_UP     - Up arrow key
  *   ARROW_DOWN   - Down arrow key
+ *   DEL_KEY      - Delete key
  *   HOME_KEY     - Home key
  *   END_KEY      - End key
  *   PAGE_UP      - Page Up key
@@ -53,6 +54,7 @@ enum editorKey
     ARROW_RIGHT,
     ARROW_UP,
     ARROW_DOWN,
+    DEL_KEY,
     HOME_KEY,
     END_KEY,
     PAGE_UP,
@@ -143,15 +145,17 @@ void enableRawMode()
 }
 
 /**
- * Reads a single keypress from standard input, handling both regular and special keys.
+ * Reads a keypress from standard input and returns it.
  *
- * This function blocks until a key is pressed, reading from STDIN. It properly handles
- * escape sequences for special keys such as arrow keys, Home, End, Page Up, and Page Down,
- * returning their corresponding enum values (e.g., ARROW_UP, HOME_KEY, PAGE_DOWN).
- * If a regular character is pressed, it returns the character itself.
- * In case of a read error (other than EAGAIN), it calls die("read").
+ * This function handles both regular characters and special keys (such as arrow keys,
+ * Home, End, Page Up/Down, Delete, etc.) by interpreting escape sequences sent by the terminal.
+ * It blocks until a key is pressed, unless an error occurs.
  *
- * @return The character read, or a special key code for recognized escape sequences.
+ * Special keys are returned as predefined constants (e.g., ARROW_UP, HOME_KEY).
+ * If an unrecognized escape sequence is encountered, the escape character ('\x1b') is returned.
+ *
+ * @return int The character code of the key pressed, or a special key constant.
+ *         On error, the function calls die("read") and does not return.
  */
 int editorReadKey()
 {
@@ -181,6 +185,8 @@ int editorReadKey()
                     {
                     case '1':
                         return HOME_KEY;
+                    case '3':
+                        return DEL_KEY;
                     case '4':
                         return END_KEY;
                     case '5':
