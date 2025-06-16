@@ -34,15 +34,18 @@
 /**
  * enum editorKey
  *
- * Defines special key codes for handling non-character keys in the editor.
- * These values are set to be greater than 1000 to avoid conflicts with
- * regular character input. The enum includes codes for the arrow keys and page navigation:
- *   - ARROW_LEFT:  Left arrow key
- *   - ARROW_RIGHT: Right arrow key
- *   - ARROW_UP:    Up arrow key
- *   - ARROW_DOWN:  Down arrow key
- *   - PAGE_UP:     Page Up key
- *   - PAGE_DOWN:   Page Down key
+ * Enumerates special key codes used by the editor to represent non-printable keys.
+ * The values start at 1000 to avoid collision with standard ASCII characters.
+ *
+ * Members:
+ *   ARROW_LEFT   - Left arrow key
+ *   ARROW_RIGHT  - Right arrow key
+ *   ARROW_UP     - Up arrow key
+ *   ARROW_DOWN   - Down arrow key
+ *   HOME_KEY     - Home key
+ *   END_KEY      - End key
+ *   PAGE_UP      - Page Up key
+ *   PAGE_DOWN    - Page Down key
  */
 enum editorKey
 {
@@ -50,6 +53,8 @@ enum editorKey
     ARROW_RIGHT,
     ARROW_UP,
     ARROW_DOWN,
+    HOME_KEY,
+    END_KEY,
     PAGE_UP,
     PAGE_DOWN
 };
@@ -138,15 +143,15 @@ void enableRawMode()
 }
 
 /**
- * Reads a single keypress from standard input, including arrow keys and page navigation keys.
+ * Reads a single keypress from standard input, handling both regular and special keys.
  *
- * This function waits for a single character input from the user,
- * handling read errors appropriately. If an escape sequence is detected,
- * it interprets arrow key and page up/down escape codes and returns the corresponding
- * editorKey enum value (ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT, PAGE_UP, PAGE_DOWN).
- * Otherwise, it returns the character read from standard input.
+ * This function blocks until a key is pressed, reading from STDIN. It properly handles
+ * escape sequences for special keys such as arrow keys, Home, End, Page Up, and Page Down,
+ * returning their corresponding enum values (e.g., ARROW_UP, HOME_KEY, PAGE_DOWN).
+ * If a regular character is pressed, it returns the character itself.
+ * In case of a read error (other than EAGAIN), it calls die("read").
  *
- * @return The character read, or a special key code for arrow keys and page navigation keys.
+ * @return The character read, or a special key code for recognized escape sequences.
  */
 int editorReadKey()
 {
@@ -174,10 +179,18 @@ int editorReadKey()
                 {
                     switch (seq[1])
                     {
+                    case '1':
+                        return HOME_KEY;
+                    case '4':
+                        return END_KEY;
                     case '5':
                         return PAGE_UP;
                     case '6':
                         return PAGE_DOWN;
+                    case '7':
+                        return HOME_KEY;
+                    case '8':
+                        return END_KEY;
                     }
                 }
             }
@@ -193,7 +206,21 @@ int editorReadKey()
                     return ARROW_RIGHT;
                 case 'D':
                     return ARROW_LEFT;
+                case 'H':
+                    return HOME_KEY;
+                case 'F':
+                    return END_KEY;
                 }
+            }
+        }
+        else if (seq[0] == 'O')
+        {
+            switch (seq[1])
+            {
+            case 'H':
+                return HOME_KEY;
+            case 'F':
+                return END_KEY;
             }
         }
         return '\x1b';
@@ -452,14 +479,14 @@ void editorMoveCursor(int key)
 }
 
 /**
- * Processes a single keypress from the user.
+ * Handles a single keypress event in the editor.
  *
- * This function reads a keypress and performs the corresponding action:
- * - If Ctrl-Q is pressed, it clears the screen and exits the program.
- * - If Page Up or Page Down is pressed, it moves the cursor up or down by one screenful.
- * - If an arrow key is pressed, it moves the cursor in the corresponding direction
- *   (up, down, left, or right) by calling editorMoveCursor().
- * Other keys are ignored.
+ * This function reads a keypress and executes the appropriate action:
+ * - On Ctrl-Q, clears the terminal and exits the editor.
+ * - On Home or End, moves the cursor to the start or end of the line.
+ * - On Page Up or Page Down, moves the cursor up or down by one screenful.
+ * - On arrow keys, moves the cursor in the corresponding direction.
+ * All other keys are ignored.
  */
 void editorProcessKeypress()
 {
@@ -470,6 +497,13 @@ void editorProcessKeypress()
         write(STDOUT_FILENO, "\x1b[2J", 4);
         write(STDOUT_FILENO, "\x1b[H", 3);
         exit(0);
+        break;
+
+    case HOME_KEY:
+        E.cx = 0;
+        break;
+    case END_KEY:
+        E.cx = E.screencols - 1;
         break;
     case PAGE_UP:
     case PAGE_DOWN:
