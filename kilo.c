@@ -1,8 +1,26 @@
 /*** Includes ***/
 
+/*
+ * These macros enable various feature test macros for the C library:
+ *
+ * _DEFAULT_SOURCE: Enables default features for the GNU C Library (glibc),
+ *                  providing access to most POSIX and GNU extensions.
+ * _BSD_SOURCE:     Provides compatibility with BSD-specific functions and
+ *                  definitions. Deprecated in favor of _DEFAULT_SOURCE, but
+ *                  still widely used for legacy code.
+ * _GNU_SOURCE:     Enables all GNU extensions as well as POSIX and BSD features.
+ *
+ * Defining these macros at the top of the file ensures that the program can use
+ * a wide range of system and library features beyond the standard C library.
+ */
+#define _DEFAULT_SOURCE
+#define _BSD_SOURCE
+#define _GNU_SOURCE
+
 #include <ctype.h>
 #include <errno.h>
 #include <sys/ioctl.h>
+#include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -64,6 +82,27 @@ enum editorKey
 /*** Data ***/
 
 /**
+ * @struct erow
+ * @brief Represents a single row of text in the editor.
+ *
+ * This structure holds the contents and size of a single line (row)
+ * in the text editor. It is used to manage and manipulate the text
+ * displayed and edited by the user.
+ *
+ * @var erow::size
+ * The length of the text in the row (number of characters).
+ *
+ * @var erow::chars
+ * Pointer to a dynamically allocated array of characters representing
+ * the contents of the row (not null-terminated).
+ */
+typedef struct erow
+{
+    int size;
+    char *chars;
+} erow;
+
+/**
  * struct editorConfig
  *
  * Holds the current state and configuration of the editor.
@@ -72,6 +111,8 @@ enum editorKey
  *   cx, cy        - Current cursor x and y position within the editor window.
  *   screenrows    - Number of rows visible in the editor window.
  *   screencols    - Number of columns visible in the editor window.
+ *   numrows       - Number of rows of text in the editor.
+ *   row           - The single row of text (erow struct) managed by the editor.
  *   orig_termios  - Original terminal settings, used to restore terminal state on exit.
  */
 struct editorConfig
@@ -79,6 +120,8 @@ struct editorConfig
     int cx, cy;
     int screenrows;
     int screencols;
+    int numrows;
+    erow row;
     struct termios orig_termios;
 };
 
@@ -306,6 +349,44 @@ int getWindowSize(int *rows, int *cols)
     }
 }
 
+/*** File i/o ***/
+
+/**
+ * Opens a file and reads its first line into the editor's row buffer.
+ *
+ * @param filename The name of the file to open.
+ *
+ * This function attempts to open the specified file in read mode. If the file
+ * cannot be opened, it calls the die() function to handle the error. It reads
+ * the first line from the file using getline(), trims any trailing newline or
+ * carriage return characters, and stores the resulting string in E.row.chars.
+ * The size of the line is stored in E.row.size, and E.numrows is set to 1.
+ * The function frees any allocated memory for the line buffer and closes the file.
+ */
+void editorOpen(char *filename)
+{
+    FILE *fp = fopen(filename, "r");
+    if (!fp)
+        die("fopen");
+    char *line = NULL;
+    size_t linecap = 0;
+    ssize_t linelen;
+    linelen = getline(&line, &linecap, fp);
+    if (linelen != -1)
+    {
+        while (linelen > 0 && (line[linelen - 1] == '\n' ||
+                               line[linelen - 1] == '\r'))
+            linelen--;
+        E.row.size = linelen;
+        E.row.chars = malloc(linelen + 1);
+        memcpy(E.row.chars, line, linelen);
+        E.row.chars[linelen] = '\0';
+        E.numrows = 1;
+    }
+    free(line);
+    fclose(fp);
+}
+
 /*** Append buffer ***/
 
 /**
@@ -370,41 +451,51 @@ void abFree(struct abuf *ab)
 /*** Output ***/
 
 /**
- * Draws the rows of the editor into an append buffer.
+ * @brief Draws each row of the editor to the append buffer.
  *
- * For each row in the editor window, this function appends a tilde (~) at the start of the line.
- * On the row one-third down the screen, it centers and displays a welcome message with the editor version.
- * All lines are cleared from the cursor to the end using an escape sequence.
- * For all but the last row, a carriage return and newline ("\r\n") are appended.
- * The number of rows drawn matches the current height of the editor window (E.screenrows).
+ * This function iterates over each visible row on the screen and appends the appropriate
+ * content to the given append buffer. If there are no file rows to display, it shows a
+ * welcome message centered on the screen. Otherwise, it displays the contents of each
+ * row, truncated to the screen width if necessary. Each line is cleared to the end and
+ * terminated with a newline, except for the last line.
  *
- * @param ab Pointer to the append buffer where the rows will be appended.
+ * @param ab Pointer to the append buffer where the screen content will be written.
  */
 void editorDrawRows(struct abuf *ab)
 {
     int y;
     for (y = 0; y < E.screenrows; y++)
     {
-        if (y == E.screenrows / 3)
+        if (y >= E.numrows)
         {
-            char welcome[80];
-            int welcomelen = snprintf(welcome, sizeof(welcome),
-                                      "Kilo editor -- version %s", KILO_VERSION);
-            if (welcomelen > E.screencols)
-                welcomelen = E.screencols;
-            int padding = (E.screencols - welcomelen) / 2;
-            if (padding)
+            if (E.numrows == 0 && y == E.screenrows / 3)
+            {
+                char welcome[80];
+                int welcomelen = snprintf(welcome, sizeof(welcome),
+                                          "Kilo editor -- version %s", KILO_VERSION);
+                if (welcomelen > E.screencols)
+                    welcomelen = E.screencols;
+                int padding = (E.screencols - welcomelen) / 2;
+                if (padding)
+                {
+                    abAppend(ab, "~", 1);
+                    padding--;
+                }
+                while (padding--)
+                    abAppend(ab, " ", 1);
+                abAppend(ab, welcome, welcomelen);
+            }
+            else
             {
                 abAppend(ab, "~", 1);
-                padding--;
             }
-            while (padding--)
-                abAppend(ab, " ", 1);
-            abAppend(ab, welcome, welcomelen);
         }
         else
         {
-            abAppend(ab, "~", 1);
+            int len = E.row.size;
+            if (len > E.screencols)
+                len = E.screencols;
+            abAppend(ab, E.row.chars, len);
         }
         abAppend(ab, "\x1b[K", 3);
         if (y < E.screenrows - 1)
@@ -531,25 +622,41 @@ void editorProcessKeypress()
 /*** Init ***/
 
 /**
- * Initializes the editor configuration.
+ * Initializes the editor state.
  *
- * Sets the initial cursor position to the top-left corner (0,0).
- * Retrieves the current terminal window size and stores the number of rows and columns
- * in the global editor configuration struct E. If retrieving the window size fails,
- * the function prints an error message and exits the program.
+ * This function sets the initial values for the editor's cursor position (E.cx, E.cy)
+ * and the number of rows (E.numrows). It also retrieves the current size of the terminal
+ * window and stores the number of screen rows and columns in E.screenrows and E.screencols.
+ * If retrieving the window size fails, the function terminates the program with an error message.
  */
 void initEditor()
 {
     E.cx = 0;
     E.cy = 0;
+    E.numrows = 0;
     if (getWindowSize(&E.screenrows, &E.screencols) == -1)
         die("getWindowSize");
 }
 
-int main()
+/**
+ * @brief Entry point of the text editor program.
+ *
+ * Initializes the terminal in raw mode and sets up the editor state.
+ * If a filename is provided as a command-line argument, opens the file in the editor.
+ * Enters the main loop, which continuously refreshes the screen and processes user keypresses.
+ *
+ * @param argc The number of command-line arguments.
+ * @param argv The array of command-line argument strings.
+ * @return int Returns 0 upon successful execution.
+ */
+int main(int argc, char *argv[])
 {
     enableRawMode();
     initEditor();
+    if (argc >= 2)
+    {
+        editorOpen(argv[1]);
+    }
     while (1)
     {
         editorRefreshScreen();
