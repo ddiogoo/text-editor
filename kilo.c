@@ -1,3 +1,5 @@
+// TODO: Vertical scrolling
+
 /*** Includes ***/
 
 #define _DEFAULT_SOURCE
