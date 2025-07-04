@@ -300,10 +300,10 @@ void editorDrawRows(struct abuf *ab)
         }
         else
         {
-            int len = E.row->size;
+            int len = E.row[y].size;
             if (len > E.screencols)
                 len = E.screencols;
-            abAppend(ab, E.row->chars, len);
+            abAppend(ab, E.row[y].chars, len);
         }
         abAppend(ab, "\x1b[K", 3);
         if (y < E.screenrows - 1)
